@@ -10,5 +10,5 @@ def get_dataset_details(filename):
     labels = set(df['label'])
     for label in labels:
         print(label,df.loc[df['label'].eq(label),'confidence_score'].mean())
-if __name__ == 'main':
+if __name__ == '__main__':
     get_dataset_details('deptweet_dataset.csv')
