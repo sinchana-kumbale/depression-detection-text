@@ -238,3 +238,204 @@ def fill_embedding_matrix(tokenizer):
         if embedding_vector is not None:        
             embedding_matrix[i] = embedding_vector
     return embedding_matrix
+
+
+wordnet_lemmatizer = WordNetLemmatizer()
+
+WINDOWS_SIZE = 10
+labels=['none','mild','moderate','moderately severe', 'severe']
+num_classes = len(labels)
+
+data_path = "/content/transcripts"
+all_participants = pd.read_csv(data_path + 'all.csv', sep=',')
+all_participants.columns =  ['index','personId', 'question', 'answer']
+all_participants = all_participants.astype({"index": int, "personId": float, "question": str, "answer": str })
+all_participants.head()
+
+nltk.download('wordnet')
+nltk.download('stopwords')
+
+all_participants_mix = all_participants.copy()
+all_participants_mix['answer'] = all_participants_mix.apply(lambda row: text_to_wordlist(row.answer).split(), axis=1)
+all_participants_mix_stopwords = all_participants.copy()
+all_participants_mix_stopwords['answer'] = all_participants_mix_stopwords.apply(lambda row: text_to_wordlist(row.answer, remove_stopwords=False).split(), axis=1)
+
+words = [w for w in all_participants_mix['answer'].tolist()]
+words = set(itertools.chain(*words))
+
+vocab_size = len(words)
+words_stop = [w for w in all_participants_mix_stopwords['answer'].tolist()]
+words_stop = set(itertools.chain(*words_stop))
+vocab_size_stop = len(words_stop)
+
+windows_size = WINDOWS_SIZE
+tokenizer = Tokenizer(num_words=vocab_size)
+tokenizer.fit_on_texts(all_participants_mix['answer'])
+tokenizer.fit_on_sequences(all_participants_mix['answer'])
+
+all_participants_mix['t_answer'] = tokenizer.texts_to_sequences(all_participants_mix['answer'])
+all_participants_mix.head()
+
+windows_size = WINDOWS_SIZE
+tokenizer = Tokenizer(num_words=vocab_size_stop)
+tokenizer.fit_on_texts(all_participants_mix_stopwords['answer'])
+tokenizer.fit_on_sequences(all_participants_mix_stopwords['answer'])
+
+all_participants_mix_stopwords['t_answer'] = tokenizer.texts_to_sequences(all_participants_mix_stopwords['answer'])
+all_participants_mix_stopwords.head()
+
+word_index = tokenizer.word_index
+word_size = len(word_index)
+print(word_index["happy"])
+
+train = load_avec_dataset_file('/content/train_split_Depression_AVEC2017.csv', 'PHQ8_Score')
+dev = load_avec_dataset_file('/content/dev_split_Depression_AVEC2017.csv', 'PHQ8_Score')
+test = load_avec_dataset_file('/content/full_test_split.csv', 'PHQ_Score')
+print("Size: train= {}, dev= {}, test= {}".format(len(train), len(dev), len(test)))
+train.head()
+
+ds_total = pd.concat([train,dev,test])
+total_phq8 = len(ds_total)
+print("Total size = {}".format(total_phq8))
+
+bins=[-1,0,5,10,15,25]
+plt.figure()
+plt.hist(ds_total["PHQ8_Score"], rwidth=0.6, bins=5)
+plt.xlabel('PHQ8 score')
+plt.ylabel('Number of participants')
+plt.show()
+
+none_ds, mild_ds, moderate_ds, moderate_severe_ds, severe_ds = split_by_phq_level(ds_total)
+print("Quantity per none_ds: {}, mild_ds: {}, moderate_ds {}, moderate_severe_ds: {}, severe_ds {}".format(len(none_ds), len(mild_ds), len(moderate_ds), len(moderate_severe_ds), len(severe_ds)))
+
+b_none_ds = ds_total[ds_total['level']==0]
+b_mild_ds = ds_total[ds_total['level']==1].sample(26)
+b_moderate_ds = ds_total[ds_total['level']==2].sample(26)
+b_moderate_severe_ds = ds_total[ds_total['level']==3]
+b_severe_ds = ds_total[ds_total['level']==4]
+
+ds_total_b = pd.concat([b_none_ds, b_mild_ds, b_moderate_ds, b_moderate_severe_ds, b_severe_ds])
+
+windows_size = WINDOWS_SIZE
+cont = 0
+word_index = tokenizer
+phrases_lp_stop = pd.DataFrame(columns=['personId','answer', 't_answer'])
+answers = all_participants_mix_stopwords.groupby('personId').agg({'answer':'sum','t_answer':'sum'})
+for p in answers.iterrows():      
+    words = p[1]["answer"]
+    size = len(words)
+    word_tokens = p[1]["t_answer"]
+ 
+    for i in range(size):
+        sentence = words[i:min(i+windows_size,size)]  
+        tokens = word_tokens[i:min(i+windows_size,size)]  
+        phrases_lp_stop.loc[cont] = [p[0], sentence, tokens]
+        cont = cont + 1
+
+windows_size = WINDOWS_SIZE
+cont = 0
+word_index = tokenizer
+phrases_lp = pd.DataFrame(columns=['personId','answer', 't_answer'])
+answers = all_participants_mix.groupby('personId').agg({'answer':'sum','t_answer':'sum'})
+
+for p in answers.iterrows():      
+    words = p[1]["answer"]
+    size = len(words)
+    word_tokens = p[1]["t_answer"]
+ 
+    for i in range(size):
+        sentence = words[i:min(i+windows_size,size)]  
+        tokens = word_tokens[i:min(i+windows_size,size)]  
+        phrases_lp.loc[cont] = [p[0], sentence, tokens]
+        cont = cont + 1
+
+phrases_lp["t_answer"] = pad_sequences(phrases_lp["t_answer"], value=0, padding="post", maxlen=windows_size).tolist()
+phrases_lp.head()
+
+ds_lp = pd.merge(ds_total, phrases_lp, left_on='Participant_ID', right_on='personId')
+ds_lp_b = pd.merge(ds_total_b, phrases_lp, left_on='Participant_ID', right_on='personId')
+
+train_lp, dev_lp, test_lp = distribute_instances(ds_lp)
+train_lp_b, dev_lp_b, test_lp_b = distribute_instances(ds_lp_b)
+
+embeddings_index = dict()
+f = open('/content/glove.6B.100d.txt', encoding="utf8")
+for line in f:
+    values = line.split()
+    word = values[0]
+    coefs = np.asarray(values[1:], dtype='float32')
+    embeddings_index[word] = coefs
+f.close()
+embedding_matrix_lp = fill_embedding_matrix(tokenizer)
+
+train_a = np.stack(train_lp['t_answer'], axis=0)
+dev_a = np.stack(dev_lp['t_answer'], axis=0)
+train_y = np.stack(train_lp['cat_level'], axis=0)
+dev_y = np.stack(dev_lp['cat_level'], axis=0)
+train_a_b = np.stack(train_lp_b['t_answer'], axis=0)
+dev_a_b = np.stack(dev_lp_b['t_answer'], axis=0)
+train_y_b = np.stack(train_lp_b['cat_level'], axis=0)
+dev_y_b = np.stack(dev_lp_b['cat_level'], axis=0)
+early_stopping = EarlyStopping(monitor='val_loss', patience=3)
+answer_inp = Input(shape=(windows_size, ))
+embedding_size_glove = 100
+answer_emb1 = Embedding(vocab_size_stop+1, embedding_size_glove, weights=[embedding_matrix_lp], input_length=windows_size, trainable=False)(answer_inp)
+
+bt = BatchNormalization()(answer_emb1)
+lstm = LSTM(embedding_size_glove, return_sequences=True, dropout=0.2, recurrent_dropout=0.2)(bt)
+
+dense1 = Dense(units=256, activation="relu")(lstm)
+dense2 = Dense(units=256, activation="relu")(dense1)
+
+flatten = Flatten()(dense2)
+
+out = Dense(5,  activation='softmax')(flatten)
+
+model = Model(inputs=[answer_inp], outputs=[out])
+model.compile(optimizer="adam", loss='categorical_crossentropy', metrics=['accuracy'])
+model.summary()
+
+model_glove_lstm_hist = model.fit(train_a, train_y, validation_data=(dev_a, dev_y), epochs=30, batch_size=64, shuffle=True, callbacks=[early_stopping])
+
+model_glove_lstm_hist_b = model.fit(train_a_b, train_y_b, validation_data=(dev_a_b, dev_y_b), epochs=30, batch_size=64, shuffle=True, callbacks=[early_stopping])
+
+plot_loss(model_glove_lstm_hist)
+plot_acc(model_glove_lstm_hist)
+plot_loss(model_glove_lstm_hist_b)
+plot_acc(model_glove_lstm_hist_b)
+
+test_a = np.stack(test_lp['t_answer'], axis=0)
+test_y = np.stack(test_lp['cat_level'], axis=0)
+test_a_b = np.stack(test_lp_b['t_answer'], axis=0)
+test_y_b = np.stack(test_lp_b['cat_level'], axis=0)
+df_confusion = confusion_matrix(model, test_a_b, test_y_b)
+df_confusion
+
+score = model.evaluate(test_a_b, test_y_b, verbose=0)
+print('Test loss:', score[0])
+print('Test accuracy:', score[1])
+
+answer_inp = Input(shape=(windows_size, ))
+embedding_size_glove = 100
+answer_emb1 = Embedding(vocab_size_stop+1, embedding_size_glove, weights=[embedding_matrix_lp], input_length=windows_size, trainable=False)(answer_inp)
+
+
+lstm1 = LSTM(embedding_size_glove, return_sequences=True, dropout=0.2, recurrent_dropout=0.2)(answer_emb1)
+lstm2 = LSTM(embedding_size_glove, dropout=0.2, recurrent_dropout=0.2)(lstm1)
+
+X = Dropout(0.2)(lstm2)
+bt = BatchNormalization()(X)
+dense1 = Dense(units=256, activation="relu")(bt)
+
+out = Dense(5,  activation='softmax')(dense1)
+
+model_2lstm = Model(inputs=[answer_inp], outputs=[out])
+model_2lstm.compile(optimizer="adam", loss='categorical_crossentropy', metrics=['accuracy'])
+model_2lstm.summary()
+
+model_glove_2lstm_b_hist = model_2lstm.fit(train_a_b, train_y_b, validation_data=(dev_a_b, dev_y_b), epochs=30, batch_size=64, shuffle=True, callbacks=[early_stopping])
+plot_loss(model_glove_2lstm_b_hist)
+plot_acc(model_glove_2lstm_b_hist)
+
+df_confusion = confusion_matrix(model_2lstm, test_a_b, test_y_b)
+df_confusion
