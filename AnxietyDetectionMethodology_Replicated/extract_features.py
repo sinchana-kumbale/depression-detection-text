@@ -28,7 +28,6 @@ with torch.no_grad():
         for index, row in df.iterrows():
             if row['speaker'] != 'Ellie':
                 text += str(row['value'])
-        max_len_text = max(max_len_text,len(text))
         tokens = roberta.encode(text)[:512]
         pickle.dump(tokens, open('transcripts_tokens' + fname_tok, 'wb') )
         last_layer_features = roberta.extract_features(tokens)
