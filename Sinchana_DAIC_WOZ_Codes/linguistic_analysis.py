@@ -7,56 +7,101 @@ nltk.download('universal_tagset')
 nltk.download('averaged_perceptron_tagger')
 from nltk.tag import pos_tag
 from nltk.tokenize import word_tokenize
+from collections import Counter
 
-def analyse_personal_pronouns(df: pd.DataFrame) -> pd.DataFrame:
+
+# Defining positive, negative and depressive word lists
+# The text files taken from: https://github.com/Jackustc/Question-Level-Feature-Extraction-on-DAIC-WOZ-dataset
+pos_word_list = []
+neg_word_list = []
+dep_word_list = []
+with open('/content/positive-words.txt','r',encoding='utf-8') as f:
+    for line in f.readlines():
+        pos_word_list.append(str(line).strip())
+    #print(pos_word_list)
+with open('/content/negative-words.txt','r',encoding='utf-8') as f:
+    for line in f.readlines():
+        neg_word_list.append(str(line).strip())
+with open('/content/depressedword.txt','r',encoding='utf-8') as f:
+    for line in f.readlines():
+        if len(line.split())==2:
+            for ele in line.split()[1].split(','): dep_word_list.append(ele)
+        else:dep_word_list.append(str(line).strip())
+          
+
+def analyse_words_used(df: pd.DataFrame) -> pd.DataFrame:
+  """
+  Analyzes the usage of absolutist words, laughter, sighs, sniffles, positive words,
+  negative words, and depressive words in the answer text of each person.
+  """
+
+  # Define sets of words for each category
+  absolutist_words = {
+      "absolutely", "all", "always", "complete", "completely", "constant",
+      "constantly", "definitely", "entire", "ever", "every", "everyone",
+      "everything", "full", "must", "never", "nothing", "totally", "whole"
+  }
   personal_pronouns = ["i", "me", "my", "mine", "we", "our", "us", "myself", "ourselves"]
-  person_pronoun_count = {}
-  for _,row in df.iterrows():
+
+  # Create empty dictionaries to store counts for each person
+  word_counts = {}
+
+  for _, row in df.iterrows():
+    person_id = row["personId"]
+    words = row["answer"].strip().split()
+    total_words = len(words)
+
+    # Initialize word counts for this person
+    word_counts[person_id] = {
+        "absolutist": 0,
+        "laugh": 0,
+        "sigh": 0,
+        "sniffle": 0,
+        "um": 0,
+        "depressive": 0,
+        "positive": 0,
+        "negative": 0,
+        "pronoun" : 0
+    }
+
+    # Count pronouns based on nltk tags
     tags = pos_tag(word_tokenize(row['answer']), tagset='universal')
-    total_words = len(row['answer'].split())
-    person_pronoun_count[row['personId']] = 0
     for word,tag in tags:
       if tag == 'PRON' and word in personal_pronouns:
-        person_pronoun_count[row['personId']] += 1
-    person_pronoun_count[row['personId']] = person_pronoun_count[row['personId']]*1000/total_words
-  df['pronoun count'] = df['personId'].apply(lambda x: person_pronoun_count.get(x))
-  return df
+        word_counts[person_id]["pronoun"] += 1
 
-def analyse_absolutist_words(df: pd.DataFrame) -> pd.DataFrame:
-  absolutist_words = set([
-    "absolutely",
-    "all",
-    "always",
-    "complete",
-    "completely",
-    "constant",
-    "constantly",
-    "definitely",
-    "entire",
-    "ever",
-    "every",
-    "everyone",
-    "everything",
-    "full",
-    "must",
-    "never",
-    "nothing",
-    "totally",
-    "whole"])
-  absolutist_words_count = {}
-  for _,row in df.iterrows():
-    words = row['answer'].strip().split()
-    total_words = len(words)
-    absolutist_words_count[row['personId']] = 0
     for word in words:
-      if word in absolutist_words:
-        absolutist_words_count[row['personId']] += 1
-    absolutist_words_count[row['personId']] = absolutist_words_count[row['personId']]*1000/total_words
-  df['absolutist count'] = df['personId'].apply(lambda x: absolutist_words_count.get(x))
+      # Count occurrences based on word categories
+      if word.startswith("<laughter>"):
+        word_counts[person_id]["laugh"] += 1
+      elif word.startswith("<sigh>"):
+        word_counts[person_id]["sigh"] += 1
+      elif word.startswith("<sniffle>"):
+        word_counts[person_id]["sniffle"] += 1
+      elif word == "um":
+        word_counts[person_id]["um"] += 1
+      elif word in dep_word_list:
+        word_counts[person_id]["depressive"] += 1
+      elif word in pos_word_list:
+        word_counts[person_id]["positive"] += 1
+      elif word in neg_word_list:
+        word_counts[person_id]["negative"] += 1
+      elif word in absolutist_words:
+        word_counts[person_id]["absolutist"] += 1
+
+    # Calculate word usage percentages
+    for category, count in word_counts[person_id].items():
+      word_counts[person_id][category] = count * 1000 / total_words
+
+  # Add new columns to the DataFrame with word usage percentages
+  for personId, category_counts in word_counts.items():
+    for category in category_counts:
+      df[f"{category} count"] = df["personId"].apply(lambda x: word_counts[x][category])
+  
   return df
 
 if __name__ == '__main__':
-  
+
   # Extracting the train, test and dev label values
   train_df = pd.read_csv('/content/train_split_Depression_AVEC2017.csv')
   test_df = pd.read_csv('/content/full_test_split.csv')
@@ -65,7 +110,9 @@ if __name__ == '__main__':
   combined_dataset = pd.concat([train_df,test_df,dev_df],ignore_index=True)
   combined_dataset = combined_dataset.sample(frac=1)
 
-
+  # Categories for which the dataset is analysed
+  categories = ["absolutist","laugh","sigh","sniffle","um","depressive","positive","negative","pronoun"]
+  
   # Analysing for the complete transcript dataset
   dataset1 = np.array(pd.read_csv('/content/dev_split_Depression_AVEC2017.csv',delimiter=',',encoding='utf-8'))[:, 0:2]
   dataset2 = np.array(pd.read_csv('/content/full_test_split.csv',delimiter=',',encoding='utf-8'))[:, 0:2]
@@ -80,11 +127,10 @@ if __name__ == '__main__':
         text = text + ' ' + str(row['value'])
     data_transcripts = data_transcripts.append({'personId':int(dataset[i][0]),'answer':text},ignore_index=True)
   complete_dataset = data_transcripts.merge(combined_dataset,how='left',left_on='personId',right_on='Participant_ID')
-  complete_dataset = analyse_personal_pronouns(complete_dataset)
-  print("Pronoun Usage by class: \n",complete_dataset.groupby('PHQ8_Binary')['pronoun count'].mean())
-  complete_dataset = analyse_absolutist_words(complete_dataset)
-  print("Absolutist Word Usage by class: \n",complete_dataset.groupby('PHQ8_Binary')['absolutist count'].mean())
-  
+  complete_dataset = analyse_words_used(complete_dataset)
+  for category in categories:
+    print("\nStats for " f"{category} count",complete_dataset.groupby('PHQ8_Binary')[f'{category} count'].mean(),complete_dataset.groupby('PHQ8_Binary')[f'{category} count'].std())
+
 
   # Analysing for the consolidated dataset
   data_path = '/content/consolidated_responses.csv'
@@ -93,9 +139,8 @@ if __name__ == '__main__':
   data_transcripts.dropna(subset=['answer'], inplace=True)
   data_transcripts['answer'] = data_transcripts['answer'].astype(str)
   complete_dataset = data_transcripts.merge(combined_dataset,how='left',left_on='personId',right_on='Participant_ID')
-  complete_dataset = analyse_personal_pronouns(complete_dataset)
-  print("Pronoun Usage by class: \n",complete_dataset.groupby('PHQ8_Binary')['pronoun count'].mean())
-  complete_dataset = analyse_absolutist_words(complete_dataset)
-  print("Absolutist Word Usage by class: \n",complete_dataset.groupby('PHQ8_Binary')['absolutist count'].mean())
-  
-  
+  complete_dataset = analyse_words_used(complete_dataset)
+  for category in categories:
+    print("\nStats for " f"{category} count",complete_dataset.groupby('PHQ8_Binary')[f'{category} count'].mean(),complete_dataset.groupby('PHQ8_Binary')[f'{category} count'].std())
+
+
