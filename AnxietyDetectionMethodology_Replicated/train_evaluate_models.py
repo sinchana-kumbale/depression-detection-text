@@ -46,7 +46,30 @@ def analyze_clf(clf, y_prob=None):
     print(classification_report(y_true, y_pred))
     print(roc_auc_score(y_true=y_true, y_score=y_prob))
 
+# Upsampling the data
+def upsample(X_train,Y_train):
+    # Separate majority and minority classes
+    X_train_0 = X_train[Y_train==0]
+    X_train_1 = X_train[Y_train==1]
 
+    # Compute the difference in size
+    size = X_train_0.shape[0] - X_train_1.shape[0]
+
+    # If the minority class is smaller, upsample it
+    if size > 0:
+        # Randomly select 'size' samples from the minority class with replacement
+        indices = np.random.choice(X_train_1.shape[0], size=size, replace=True)
+        #print(indices)
+        X_upsampled = X_train_1[indices]
+        Y_upsampled = np.ones(size)
+
+      # Concatenate the upsampled minority class and the original majority class
+        X_train = np.concatenate((X_train_0, X_train_1, X_upsampled))
+        Y_train = np.concatenate((np.zeros(X_train_0.shape[0]), np.ones(X_train_1.shape[0]), Y_upsampled))
+
+    return np.array(X_train), np.array(Y_train)
+
+# Extracting the token and feature files for each participant
 text_feat = {}
 with torch.no_grad():
     for text_feat_file in tqdm.tqdm(glob.glob("/kaggle/working/*_feat.p")):
@@ -70,6 +93,7 @@ for i in range(0,len(dataset3)):
         df3.loc[len(df3.index)] = [str(int(dataset3[i][0])),int(dataset3[i][1]) , text_feat[str(int(dataset3[i][0]))]]
 
 
+# Creating the test, train and validation sets 
 df = pd.concat([df1,df2,df3],axis=0)
 feats, y = np.stack(df.transcripts_features.values), df['label']
 print(feats.shape, y.shape)
@@ -77,6 +101,10 @@ print(feats.shape, y.shape)
 X_train,y_train = np.stack(df3.transcripts_features.values), df3['label']
 X_valid,y_valid = np.stack(df1.transcripts_features.values), df1['label']
 X_test,y_test = np.stack(df2.transcripts_features.values), df2['label']
+
+X_train,y_train = upsample(X_train,y_train)
+X_valid,y_valid = upsample(X_valid,y_valid)
+X_test,y_test = upsample(X_test,y_test)
 
 # Random baseline
 from sklearn.dummy import DummyClassifier
