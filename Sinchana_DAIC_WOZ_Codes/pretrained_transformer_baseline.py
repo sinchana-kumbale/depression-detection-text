@@ -136,12 +136,12 @@ model = t.get_classifier()
 learner = ktrain.get_learner(model, train_data=trn, val_data=val, batch_size=BATCH_SIZE)
 
 # Training the model
-learner.fit_onecycle(2e-5, 5)
+learner.autofit(1e-6)
 
 # Getting predictions on test set
 predictor = ktrain.get_predictor(learner.model, preproc = t)
 predict = predictor.predict(X_test)
-learner.validate(val_data = t.preprocess_test(X_test, Y_test))
+learner.evaluate(test_data = t.preprocess_test(X_test, Y_test))
 TP,FP,TN,FN = perf_measure(Y_test, predict)
 print(TP,FP,TN,FN)
 print("Precision: ", TP/(TP+FP))
