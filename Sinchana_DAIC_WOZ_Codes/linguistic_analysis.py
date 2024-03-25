@@ -28,6 +28,14 @@ with open('/content/depressedword.txt','r',encoding='utf-8') as f:
             for ele in line.split()[1].split(','): dep_word_list.append(ele)
         else:dep_word_list.append(str(line).strip())
           
+def weighted_scaler(X, feature_weights):
+  """
+  Scales features based on weights and then applies standard scaling.
+  """
+  weighted_features = []
+  for i in range(len(X[0])):
+    weighted_features.append(X[:, i] * feature_weights[features[i]])
+  return StandardScaler().fit_transform(np.array(weighted_features).T)
 
 def analyse_words_used(df: pd.DataFrame) -> pd.DataFrame:
   """
@@ -41,7 +49,8 @@ def analyse_words_used(df: pd.DataFrame) -> pd.DataFrame:
       "constantly", "definitely", "entire", "ever", "every", "everyone",
       "everything", "full", "must", "never", "nothing", "totally", "whole"
   }
-  personal_pronouns = ["i", "me", "my", "mine", "we", "our", "us", "myself", "ourselves"]
+  first_personal_pronouns = ["i", "me", "my", "mine", "myself"]
+  third_personal_pronouns = ["he", "she", "him", "her", "his", "hers", "they", "them", "theirs"]
 
   # Create empty dictionaries to store counts for each person
   word_counts = {}
@@ -61,14 +70,24 @@ def analyse_words_used(df: pd.DataFrame) -> pd.DataFrame:
         "depressive": 0,
         "positive": 0,
         "negative": 0,
-        "pronoun" : 0
+        "firstpronoun" : 0,
+        "thirdpronoun" : 0,
+        "sentimentp" : 0,
+        "sentiments" : 0
     }
 
     # Count pronouns based on nltk tags
     tags = pos_tag(word_tokenize(row['answer']), tagset='universal')
     for word,tag in tags:
-      if tag == 'PRON' and word in personal_pronouns:
-        word_counts[person_id]["pronoun"] += 1
+      if tag == 'PRON' and word in first_personal_pronouns:
+        word_counts[person_id]["firstpronoun"] += 1
+      if tag == 'PRON' and word in third_personal_pronouns:
+        word_counts[person_id]["thirdpronoun"] += 1
+    
+    for sentence in row["answer"].split("."):
+      sentence_sentiment =  TextBlob(sentence).sentiment
+      word_counts[person_id]["sentimentp"] += sentence_sentiment.polarity
+      word_counts[person_id]["sentiments"] += sentence_sentiment.subjectivity
 
     for word in words:
       # Count occurrences based on word categories
@@ -111,7 +130,7 @@ if __name__ == '__main__':
   combined_dataset = combined_dataset.sample(frac=1)
 
   # Categories for which the dataset is analysed
-  categories = ["absolutist","laugh","sigh","sniffle","um","depressive","positive","negative","pronoun"]
+  categories = ["absolutist","laugh","sigh","sniffle","um","depressive","positive","negative","firstpronoun", "thirdpronoun"]
   
   # Analysing for the complete transcript dataset
   dataset1 = np.array(pd.read_csv('/content/dev_split_Depression_AVEC2017.csv',delimiter=',',encoding='utf-8'))[:, 0:2]
@@ -142,5 +161,52 @@ if __name__ == '__main__':
   complete_dataset = analyse_words_used(complete_dataset)
   for category in categories:
     print("\nStats for " f"{category} count",complete_dataset.groupby('PHQ8_Binary')[f'{category} count'].mean(),complete_dataset.groupby('PHQ8_Binary')[f'{category} count'].std())
+  
+  # Visualising for PCA
+  features = ['absolutist count','laugh count','sigh count','sniffle count','um count','depressive count','positive count', 'negative count', 'firstpronoun count','thirdpronoun count', 'sentimentp count', 'sentiments count']
+  feature_weights = {
+      'absolutist count': 1,
+      'laugh count': 1,
+      'sigh count': 1,
+      'sniffle count': 1,
+      'um count': 1,
+      'depressive count': 3,  # Higher weight for depressive words
+      'positive count': 1,  # Higher weight for positive words
+      'negative count': 4,  # Higher weight for negative words
+      'firstpronoun count': 2,
+      'thirdpronoun count': 1,
+      'sentimentp count': 5,
+      'sentiments count': 1  # You can adjust weights for categorical features as well
+      }
+  # Separating out the features
+  x = complete_dataset.loc[:, features].values
+  
+  # Separating out the target
+  y = complete_dataset.loc[:,['PHQ8_Binary']].values
+  
+  # Standardizing the features
+  x = weighted_scaler(x, feature_weights)
 
+  pca = PCA(n_components=3)
+  principalComponents = pca.fit_transform(x)
+  principalDf = pd.DataFrame(data = principalComponents
+             , columns = ['principal component 1', 'principal component 2', 'principal component 3'])
+  finalDf = pd.concat([principalDf, complete_dataset[['PHQ8_Binary']]], axis = 1)
+  fig = plt.figure(figsize = (8,8))
+  ax = fig.add_subplot(1,1,1, projection='3d')
+  ax.set_xlabel('Principal Component 1', fontsize = 15)
+  ax.set_ylabel('Principal Component 2', fontsize = 15)
+  ax.set_zlabel('Principal Component 3', fontsize = 15)
+  ax.set_title('3 component PCA', fontsize = 20)
 
+  targets = [0,1]
+  colors = ['b', 'g']
+  for target, color in zip(targets,colors):
+      indicesToKeep = finalDf['PHQ8_Binary'] == target
+      ax.scatter(finalDf.loc[indicesToKeep, 'principal component 1']
+                , finalDf.loc[indicesToKeep, 'principal component 2']
+                , finalDf.loc[indicesToKeep, 'principal component 3']
+                , c = color
+                , s = 50)
+  ax.legend(['Non Depressed', 'Depressed'])
+  ax.grid()
