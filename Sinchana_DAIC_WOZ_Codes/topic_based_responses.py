@@ -7,6 +7,7 @@ from gensim import corpora, models
 import pyLDAvis
 import pyLDAvis.gensim 
 import matplotlib.pyplot as plt
+from gensim.models.coherencemodel import CoherenceModel
 %matplotlib inline
 
 # Setting up the stopwords with some custom stopwords
@@ -105,12 +106,7 @@ if __name__ == '__main__':
     participant_topic_wise = get_particpiant_responses(participant_ids, lda_model, dictionary, selected_topics)
     topic_wise_responses = pd.DataFrame.from_dict(participant_topic_wise, orient="index", columns=["topic_responses"])
     topic_wise_responses["personId"] = topic_wise_responses.index
-    topic_wise_responses.to_csv('topic_wise_responses_manual_selection.csv')
+    topic_wise_responses.to_csv('topic_wise_responses_choerence_score.csv')
 
 
-        
     
-        
-    
-
-
