@@ -161,16 +161,33 @@ if __name__ == '__main__':
     env = DepressionDetectionEnv(participants, responses, labels)
     max_response_length = max(len(response) for response in responses)
     agent = QLearningAgent(state_size=len(participants), action_size=max_response_length)
-    num_episodes = 3
+    num_episodes = 10
+    episode_rewards = []
+    best_reward = float('-inf')
+    early_stopping_count = 0
+    early_stopping_window = 2
+    
     # Train RL agent
     for episode in range(num_episodes):
         state = env.reset()
         done = False
+        episode_reward = 0
         while not done:
             action = agent.select_action(state, env)
             next_state, reward, done, _ = env.step(action)
             agent.update(state, action, reward, next_state)
             state = next_state
+            episode_reward += reward
+        episode_rewards.append(episode_reward)
+        if episode_rewards[-early_stopping_window:] == [best_reward] * early_stopping_window:
+            early_stopping_count += 1
+        else:
+            early_stopping_count = 0
+            best_reward = max(best_reward, episode_reward)
+        
+        if early_stopping_count >= early_stopping_window:
+            print(f"Early stopping triggered after {episode} episodes")
+            break
         selected_responses_per_participant = env.selected_responses
   
     # Curating responses for each participant
