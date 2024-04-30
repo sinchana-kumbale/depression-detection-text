@@ -10,6 +10,24 @@ from transformers import AutoTokenizer, RobertaModel
 tokenizer = AutoTokenizer.from_pretrained("FacebookAI/roberta-base")
 model = RobertaModel.from_pretrained("FacebookAI/roberta-base")
 
+# Defining Keywords related to positive, negative or depressive emotions
+pos_word_list = []
+neg_word_list = []
+dep_word_list = []
+with open('/kaggle/input/word-distribution/positive-words.txt','r',encoding='utf-8') as f:
+    for line in f.readlines():
+        pos_word_list.append(str(line).strip())
+    #print(pos_word_list)
+with open('/kaggle/input/word-distribution/negative-words.txt','r',encoding='utf-8') as f:
+    for line in f.readlines():
+        neg_word_list.append(str(line).strip())
+with open('/kaggle/input/word-distribution/depressedword.txt','r',encoding='utf-8') as f:
+    for line in f.readlines():
+        if len(line.split())==2:
+            for ele in line.split()[1].split(','): dep_word_list.append(ele)
+        else:dep_word_list.append(str(line).strip())
+keywords = pos_word_list + neg_word_list + dep_word_list
+
 # Defines the classifier using RoBERTa
 class Classifier(nn.Module):
     def __init__(self):
@@ -62,10 +80,10 @@ class DepressionDetectionEnv(gym.Env):
         return self.current_participant, reward, done, {}  # Return next state, reward, done, info
     
     def calculate_reward(self, output):
-        # Define reward based on the effect on downstream classifier accuracy
-        # Defined it as the improvement in accuracy
         current_accuracy = self.evaluate_classifier()
-        reward = current_accuracy - self.previous_accuracy
+        lexical_diversity = self.evaluate_lexical_diversity()
+        keyword_matches = self.evaluate_keyword_matches()
+        reward = (current_accuracy - self.previous_accuracy) + lexical_diversity + keyword_matches 
         self.previous_accuracy = current_accuracy
         return reward
     
@@ -81,6 +99,30 @@ class DepressionDetectionEnv(gym.Env):
             correct += torch.sum(prediction == label).item()
         accuracy = correct / total
         return accuracy
+        
+    def evaluate_lexical_diversity(self):
+        total_diversity = 0
+        overall_count = len(self.labels)
+        for participant, label in zip(self.participants, self.labels):
+            selected_responses = self.selected_responses[participant]
+            selected_responses = '. '.join(selected_responses)
+            if len(selected_responses) == 0:
+                continue
+            tokens = nltk.word_tokenize(selected_responses)
+            vocab_size = len(set(tokens))
+            total_diversity += vocab_size / len(tokens)
+        return total_diversity/overall_count
+    
+    def evaluate_keyword_matches(self):
+        total_keyword_matches = 0
+        overall_count = len(self.labels)
+        for participant, label in zip(self.participants, self.labels):
+            selected_responses = self.selected_responses[participant] 
+            selected_responses = '. '.join(selected_responses)
+            if len(selected_responses) == 0:
+                continue
+            total_keyword_matches += (sum(keyword in selected_responses.lower() for keyword in keywords)/len(selected_responses))
+        return total_keyword_matches/overall_count
 
 # Defines the learning agent
 class QLearningAgent:
