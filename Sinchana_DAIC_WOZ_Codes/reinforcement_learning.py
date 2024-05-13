@@ -83,7 +83,8 @@ class DepressionDetectionEnv(gym.Env):
         current_accuracy = self.evaluate_classifier()
         lexical_diversity = self.evaluate_lexical_diversity()
         keyword_matches = self.evaluate_keyword_matches()
-        reward = (current_accuracy - self.previous_accuracy) + lexical_diversity + keyword_matches 
+        readability_score = self.evaluate_readability()
+        reward = (current_accuracy - self.previous_accuracy) + lexical_diversity + keyword_matches + readability_score
         self.previous_accuracy = current_accuracy
         return reward
     
@@ -123,7 +124,16 @@ class DepressionDetectionEnv(gym.Env):
                 continue
             total_keyword_matches += (sum(keyword in selected_responses.lower() for keyword in keywords)/len(selected_responses))
         return total_keyword_matches/overall_count
-
+    
+    def evaluate_readability(self):
+        total_readability = 0
+        overall_count = len(self.labels)
+        for participant, label in zip(self.participants, self.labels):
+            selected_responses = self.selected_responses[participant] 
+            selected_responses = '. '.join(selected_responses)
+            if len(selected_responses) > 0:
+                total_readability += readability.getmeasures(selected_responses, lang='en')['readability grades']['FleschReadingEase']
+        return total_readability/overall_count
 # Defines the learning agent
 class QLearningAgent:
     def __init__(self, state_size, action_size, learning_rate=0.1, discount_factor=0.99, epsilon=0.1):
