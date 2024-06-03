@@ -9,7 +9,7 @@ import re
 import pickle
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(device)
-model_name = 'Intel/neural-chat-7b-v3'
+model_name = 'Intel/neural-chat-7b-v3-3'
 model = transformers.AutoModelForCausalLM.from_pretrained(model_name)
 tokenizer = transformers.AutoTokenizer.from_pretrained(model_name)
 model.to(device)
