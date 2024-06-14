@@ -1,4 +1,4 @@
-# Loading the model details
+
 import transformers
 from peft import LoraConfig, LoraModel
 import torch
@@ -13,23 +13,13 @@ import torch.nn.functional as F
 torch.manual_seed(42)
 
 
-def get_response_dict(response_string):
-	responses = response_string.split("\nResponse: ")
-	result_dict = {}
-	for response in responses[1:]:
-		response_parts = response.split(" Label: ")
-		response_text = response_parts[0]
-		label = int(response_parts[1])
-		# Store the response text in the dictionary with the label as the key
-		result_dict[label] = response_text
-	return result_dict
-
-
+# Defining the Model and the LoRA configuration
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(device)
 model_name = 'Intel/neural-chat-7b-v3-3'
 model = transformers.AutoModelForCausalLM.from_pretrained(model_name)
 tokenizer = transformers.AutoTokenizer.from_pretrained(model_name)
+model.generation_config.pad_token_id = tokenizer.pad_token_id
 model.to(device)
 
 
@@ -46,22 +36,50 @@ lora_model.to(device)
 # Preparing the data
 phq_questions = ['have interest or pleasure in doing things', 'feel down, depressed or hopeless', 'have trouble staying or falling asleep or sleeping for too long', 'feel tired or have little energy', 'have poor appetite or overeats',
                  'feel bad about themself, that they are a failure or have let themself or family down', 'trouble concentrating on things like school work, reading or watching television', 'move or speak more slowly than usual or be very fidgety and restless']
+label_desc = ['PHQ8_NoInterest', 'PHQ8_Depressed', 'PHQ8_Sleep', 'PHQ8_Tired', 'PHQ8_Appetite', 'PHQ8_Failure', 'PHQ8_Concentrating', 'PHQ8_Moving']
 participant_data = pd.read_csv('augmented_dataset_phq_similarity.csv', index_col=[0])
+train_df = pd.read_csv('train_split_Depression_AVEC2017.csv')
+dev_df = pd.read_csv('dev_split_Depression_AVEC2017.csv')
+test_df = pd.read_csv('full_test_split.csv')
 
-# participant_dictionary = participant_data.set_index('personId').T.to_dict('list')
-with open ('fewshotexamples', 'rb') as fp:
-    few_shot_examples = pickle.load(fp)
+train_data = train_df.merge(participant_data, left_on='Participant_ID', right_on='personId')
+val_data = dev_df.merge(participant_data, left_on='Participant_ID', right_on='personId')
+test_data = test_df.merge(participant_data, left_on='Participant_ID', right_on='personId')
+train_data = train_data.dropna()
+val_data = val_data.dropna()
+test_data = test_data.dropna()
 
+print(len(train_data), len(val_data), len(test_data))
 fine_tuning_data = []
 label_list = []
-# LoRa with fewshotexamples
-for i in range(len(few_shot_examples)):
-	response_dictionary = get_response_dict(few_shot_examples[i])
-	for label, response in response_dictionary.items():
-		prompt = "If a clinician was providing a diagnosis for the PHQ symptom: " + phq_questions[i] + " for the response: " + response + " based on the level (0,1,2,3) you would provide the label " + label
-		inputs = tokenizer(prompt, return_tensors="pt").to(device)
-		fine_tuning_data.append(inputs)
-		label_list.append(label)
+
+# Train data
+for index, row in train_data.iterrows():
+    participant_id = row['personId']
+    responses = []
+    for i in range(1, 9):
+        responses.append(row['phq_response' + str(i)])
+    for i in range(len(phq_questions)):
+        prompt = "If a clinician was providing a diagnosis for the PHQ symptom: " + phq_questions[i] + " for the response: " + responses[i] + " based on the level (0,1,2,3) you would provide the label " + str(row[label_desc[i]])  # Access label from corresponding PHQ column
+        inputs = tokenizer(prompt, return_tensors="pt").to(device)
+        fine_tuning_data.append(inputs)
+        label_list.append(row[label_desc[i]])  # Access label from corresponding PHQ column
+
+
+# Validation data 
+val_fine_tuning_data = []
+val_label_list = []
+for index, row in val_data.iterrows():
+    participant_id = row['personId']
+    responses = []
+    for i in range(1, 9):
+        responses.append(row['phq_response' + str(i)])
+    for i in range(len(phq_questions)):
+        prompt = "If a clinician was providing a diagnosis for the PHQ symptom: " + phq_questions[i] + " for the response: " + responses[i] + " based on the level (0,1,2,3) you would provide the label "  # Access label from corresponding PHQ column
+        inputs = tokenizer(prompt, return_tensors="pt").to(device)
+        val_fine_tuning_data.append(inputs)
+        val_label_list.append(row[label_desc[i]])  # Access label from corresponding PHQ column
+
 
 # Fine-tune the Lora model
 optimizer = torch.optim.AdamW(lora_model.parameters(), lr=2e-5)  # Adjust learning rate as needed
@@ -69,15 +87,25 @@ loss_fct = nn.CrossEntropyLoss()
 for epoch in range(3):
     for i in range(len(fine_tuning_data)):
         data = fine_tuning_data[i]
-        print(data)
         optimizer.zero_grad()
         outputs = lora_model.generate(**data, max_new_tokens=190)
         outputs = F.softmax(outputs.float(),dim=-1)
-        loss = loss_fct(outputs,torch.tensor(label_list[i]).unsqueeze(0).to(outputs.device))
+        loss = loss_fct(outputs,torch.tensor(label_list[i]).unsqueeze(0).to(outputs.device).long())
         loss.requires_grad = True
         loss.backward()
         optimizer.step()
     print(f"Epoch: {epoch+1}, Loss: {loss}")
+    if val_fine_tuning_data:
+        val_loss = 0
+        for i in range(len(val_fine_tuning_data)):
+            data = val_fine_tuning_data[i]
+            outputs = lora_model.generate(**data, max_new_tokens=190)
+            outputs = F.softmax(outputs.float(),dim=-1)
+            val_loss += loss_fct(outputs,torch.tensor(val_label_list[i]).unsqueeze(0).to(outputs.device).long()).item()
+        val_loss /= len(val_fine_tuning_data)
+        print(f"Epoch: {epoch+1}, Validation Loss: {val_loss}")
+
+    
 
 
 # Using the prompt and data to create output
@@ -105,13 +133,13 @@ def predict_phq_score(participant_id, top_n_responses, predictions):
 
 # Running the Model:
 predicted_scores = {}
-for index, row in participant_data.iterrows():
+for index, row in test_data.iterrows():
     participant_id = row['personId']
     responses = []
     for i in range(1,9):
         responses.append(row['phq_response'+str(i)])
     predict_phq_score(participant_id, responses, predicted_scores)
     row = [participant_id] + predicted_scores[participant_id]['PHQs'] + [predicted_scores[participant_id]['Total Score']]
-    with open('output.csv', 'a') as f:
+    with open('output_lora.csv', 'a') as f:
         f_write = writer(f)
         f_write.writerow(row)
