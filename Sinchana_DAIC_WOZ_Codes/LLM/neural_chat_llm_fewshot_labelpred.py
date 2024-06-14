@@ -37,7 +37,7 @@ def predict_phq_score(participant_id, top_n_responses, predictions):
             phq_questions[index] + " where some example responses and labels include " + few_shot_examples[index] + "\nWhere 0 represents hardly any symptoms 1 represents mild symptoms 2 represents moderate symptoms and 3 represents severe symptoms"  + "\n For the Participant Response: " + top_n_responses[index] + "\nBased on the level provide only a single word None, Mild, Moderate or Severe as a response and ensure mild diagnosis without overestimation"
         inputs = tokenizer(prompt, return_tensors="pt").to(device)
         outputs = model.generate(**inputs, max_new_tokens=190)
-        matched_label = re.search(r'(None|Mild|Moderate|Severe)', tokenizer.decode(outputs[0], skip_special_tokens=True).strip().split("\n")[-1])
+        matched_score = re.search(r'(None|Mild|Moderate|Severe)', tokenizer.decode(outputs[0], skip_special_tokens=True).strip().split("\n")[-1])
         if matched_score:  # Check if there's a match
             # Extract the matched group
             predicted_score = matched_score.group()
