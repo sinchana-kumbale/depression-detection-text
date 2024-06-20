@@ -1,4 +1,5 @@
-I will try to provide a description of the folders and codes in them to help replicate the results
+This details the code efforts carried out from January 2024 to July 2024 for depression detection focused on text information and through the README will try to highlight the different folders and files inside and will illustrate what function they serve.
+
 - DEPTWEET Replication
   
   Replicates the work by Kabir et al, 2023 ([Paper](https://www.sciencedirect.com/science/article/pii/S0747563222003235))
