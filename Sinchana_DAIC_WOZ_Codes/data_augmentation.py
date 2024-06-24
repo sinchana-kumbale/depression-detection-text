@@ -43,7 +43,7 @@ def augment_responses(augmented_responses, selected_person_ids, n, m):
             pass
         subset = choices(topics, k=m)
         shuffle(subset)
-        augmented_responses.loc[len(augmented_responses.index)] = ['\n'.join(subset), person_id, len('\n'.join(subset).split("."))]
+        augmented_responses.loc[len(augmented_responses.index)] = ['\n'.join(subset), person_id]
 
 
 if __name__ == '__main__':
