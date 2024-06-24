@@ -82,6 +82,7 @@ if __name__ == '__main__':
     coherence_model_lda = CoherenceModel(model=lda_model, texts=[cleaned_transcripts], dictionary=dictionary, coherence='c_v')
     coherence_lda = coherence_model_lda.get_coherence_per_topic()
     selected_topics = []
+    threshold = 0.655
     for idx, coherence_score in enumerate(coherence_lda):
       if coherence_score > threshold:
         selected_topics.append(idx)
