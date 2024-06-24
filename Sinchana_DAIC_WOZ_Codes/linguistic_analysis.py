@@ -8,7 +8,10 @@ nltk.download('averaged_perceptron_tagger')
 from nltk.tag import pos_tag
 from nltk.tokenize import word_tokenize
 from collections import Counter
-
+import matplotlib.pyplot as plt
+import umap.umap_ as umap
+from textblob import TextBlob
+from sklearn.preprocessing import StandardScaler
 
 # Defining positive, negative and depressive word lists
 # The text files taken from: https://github.com/Jackustc/Question-Level-Feature-Extraction-on-DAIC-WOZ-dataset
@@ -16,17 +19,18 @@ pos_word_list = []
 neg_word_list = []
 dep_word_list = []
 with open('/content/positive-words.txt','r',encoding='utf-8') as f:
-    for line in f.readlines():
-        pos_word_list.append(str(line).strip())
-    #print(pos_word_list)
+  for line in f.readlines():
+    pos_word_list.append(str(line).strip())
 with open('/content/negative-words.txt','r',encoding='utf-8') as f:
-    for line in f.readlines():
-        neg_word_list.append(str(line).strip())
+  for line in f.readlines():
+    neg_word_list.append(str(line).strip())
 with open('/content/depressedword.txt','r',encoding='utf-8') as f:
-    for line in f.readlines():
-        if len(line.split())==2:
-            for ele in line.split()[1].split(','): dep_word_list.append(ele)
-        else:dep_word_list.append(str(line).strip())
+  for line in f.readlines():
+    if len(line.split())==2:
+      for ele in line.split()[1].split(','):
+        dep_word_list.append(ele)
+    else:
+      dep_word_list.append(str(line).strip())
           
 def weighted_scaler(X, feature_weights):
   """
@@ -137,14 +141,15 @@ if __name__ == '__main__':
   dataset2 = np.array(pd.read_csv('/content/full_test_split.csv',delimiter=',',encoding='utf-8'))[:, 0:2]
   dataset3 = np.array(pd.read_csv('/content/train_split_Depression_AVEC2017.csv',delimiter=',',encoding='utf-8'))[:, 0:2]
   dataset = np.concatenate((dataset1, np.concatenate((dataset2, dataset3))))
-  data_transcripts = pd.DataFrame()
+  data_transcripts = []
   for i in range(0,len(dataset)):
     df = pd.read_csv('/content/' + str(int(dataset[i][0])) + "_TRANSCRIPT.csv",delimiter='\t')
     text = ''
     for index, row in df.iterrows():
       if row['speaker'] != 'Ellie':
         text = text + ' ' + str(row['value'])
-    data_transcripts = data_transcripts.append({'personId':int(dataset[i][0]),'answer':text},ignore_index=True)
+    data_transcripts.append({'personId':int(dataset[i][0]),'answer':text})
+  data_transcripts = pd.DataFrame(data_transcripts)
   complete_dataset = data_transcripts.merge(combined_dataset,how='left',left_on='personId',right_on='Participant_ID')
   complete_dataset = analyse_words_used(complete_dataset)
   for category in categories:
@@ -170,13 +175,13 @@ if __name__ == '__main__':
       'sigh count': 1,
       'sniffle count': 1,
       'um count': 1,
-      'depressive count': 3,  # Higher weight for depressive words
-      'positive count': 1,  # Higher weight for positive words
-      'negative count': 4,  # Higher weight for negative words
-      'firstpronoun count': 2,
+      'depressive count': 1,  
+      'positive count': 1,  
+      'negative count': 1,  
+      'firstpronoun count': 1,
       'thirdpronoun count': 1,
-      'sentimentp count': 5,
-      'sentiments count': 1  # You can adjust weights for categorical features as well
+      'sentimentp count': 1,
+      'sentiments count': 1  
       }
   # Separating out the features
   x = complete_dataset.loc[:, features].values
@@ -186,27 +191,21 @@ if __name__ == '__main__':
   
   # Standardizing the features
   x = weighted_scaler(x, feature_weights)
-
-  pca = PCA(n_components=3)
-  principalComponents = pca.fit_transform(x)
-  principalDf = pd.DataFrame(data = principalComponents
-             , columns = ['principal component 1', 'principal component 2', 'principal component 3'])
-  finalDf = pd.concat([principalDf, complete_dataset[['PHQ8_Binary']]], axis = 1)
-  fig = plt.figure(figsize = (8,8))
-  ax = fig.add_subplot(1,1,1, projection='3d')
-  ax.set_xlabel('Principal Component 1', fontsize = 15)
-  ax.set_ylabel('Principal Component 2', fontsize = 15)
-  ax.set_zlabel('Principal Component 3', fontsize = 15)
-  ax.set_title('3 component PCA', fontsize = 20)
-
+  
+  
+  umap_model = umap.UMAP(n_components=3)
+  umap_data = umap_model.fit_transform(x)
   targets = [0,1]
   colors = ['b', 'g']
-  for target, color in zip(targets,colors):
-      indicesToKeep = finalDf['PHQ8_Binary'] == target
-      ax.scatter(finalDf.loc[indicesToKeep, 'principal component 1']
-                , finalDf.loc[indicesToKeep, 'principal component 2']
-                , finalDf.loc[indicesToKeep, 'principal component 3']
-                , c = color
-                , s = 50)
-  ax.legend(['Non Depressed', 'Depressed'])
-  ax.grid()
+  
+  depressed = complete_dataset[complete_dataset['PHQ8_Binary'] == 1]
+  not_depressed = complete_dataset[complete_dataset['PHQ8_Binary'] == 0]
+  
+  plt.scatter(umap_data[depressed.index, 0], umap_data[depressed.index, 1], label='Depressed')
+  plt.scatter(umap_data[not_depressed.index, 0], umap_data[not_depressed.index, 1], label='Not Depressed')
+  
+  plt.xlabel('UMAP Dimension 1')
+  plt.ylabel('UMAP Dimension 2')
+  plt.title('UMAP Visualization')
+  plt.legend()
+  plt.show()
