@@ -84,8 +84,8 @@ if __name__ == '__main__':
     selected_topics = []
     threshold = 0.655
     for idx, coherence_score in enumerate(coherence_lda):
-      if coherence_score > threshold:
-        selected_topics.append(idx)
+        if coherence_score > threshold:
+            selected_topics.append(idx)
     participant_topic_wise = get_particpiant_responses(participant_ids, lda_model, dictionary, selected_topics)
     topic_wise_responses = pd.DataFrame.from_dict(participant_topic_wise, orient="index", columns=["topic_responses"])
     topic_wise_responses["personId"] = topic_wise_responses.index
