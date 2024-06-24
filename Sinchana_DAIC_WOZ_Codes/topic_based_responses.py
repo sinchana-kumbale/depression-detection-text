@@ -72,37 +72,19 @@ if __name__ == '__main__':
         transcript_texts.extend(list(participant_transcript['value'].values))
     cleaned_transcripts = [clean_text(str(text)) for text in transcript_texts]
 
-    # Creating different num of topic models
-    topic_nums = [8,10,15]
-    for topic_num in topic_nums:
-        lda_model, corpus, dictionary = create_lda_model(cleaned_transcripts, topic_num)
-        visualise_lda_model(lda_model, corpus, dictionary)
-        participant_topic_wise = get_particpiant_responses(participant_ids, lda_model, dictionary, list(range(0,topic_num)))
-        topic_wise_responses = pd.DataFrame.from_dict(participant_topic_wise, orient="index", columns=["topic_responses"])
-        topic_wise_responses["personId"] = topic_wise_responses.index
-        topic_wise_responses.to_csv('topic_wise_responses_' + str(topic_num) + '.csv')
 
     # Creating a subset of the topic through manual selection
-    lda_model, corpus, dictionary = create_lda_model(cleaned_transcripts, 10)
+    lda_model, corpus, dictionary = create_lda_model(cleaned_transcripts, 29)
     visualise_lda_model(lda_model, corpus, dictionary)
-    participant_topic_wise = get_particpiant_responses(participant_ids, lda_model, dictionary, [0,1,2,3,4,5,6,7,8,9])
-    topic_wise_responses = pd.DataFrame.from_dict(participant_topic_wise, orient="index", columns=["topic_responses"])
-    topic_wise_responses["personId"] = topic_wise_responses.index
-    topic_wise_responses.to_csv('topic_wise_responses_manual_selection.csv')
-
+    
     # Creating a subset of topics through coherence scores
-    lda_model, corpus, dictionary = create_lda_model(cleaned_transcripts, 10)
-    visualise_lda_model(lda_model, corpus, dictionary)
     
     coherence_model_lda = CoherenceModel(model=lda_model, texts=[cleaned_transcripts], dictionary=dictionary, coherence='c_v')
     coherence_lda = coherence_model_lda.get_coherence_per_topic()
-    scores = {}
+    selected_topics = []
     for idx, coherence_score in enumerate(coherence_lda):
-        scores[idx] = coherence_score
-    num_to_exclude = 2
-    sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-    selected_topics = [item[0] for item in sorted_scores[:-num_to_exclude]]
-    
+      if coherence_score > threshold:
+        selected_topics.append(idx)
     participant_topic_wise = get_particpiant_responses(participant_ids, lda_model, dictionary, selected_topics)
     topic_wise_responses = pd.DataFrame.from_dict(participant_topic_wise, orient="index", columns=["topic_responses"])
     topic_wise_responses["personId"] = topic_wise_responses.index
