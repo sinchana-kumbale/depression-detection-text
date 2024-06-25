@@ -10,8 +10,6 @@ import re
 import pickle
 import torch.nn.functional as F
 
-torch.manual_seed(42)
-
 
 # Defining the Model and the LoRA configuration
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -25,10 +23,10 @@ model.to(device)
 
 config = LoraConfig(
     task_type="CAUSAL_LM",
-    r=4,
+    r=16,
     lora_alpha=16,
     lora_dropout=0.01,
-    target_modules=['q_proj','k_proj','v_proj','o_proj']
+    target_modules=['k_proj','v_proj','q_proj', 'o_proj']
 )
 lora_model = LoraModel(model, config, "default")
 lora_model.to(device)
@@ -37,7 +35,12 @@ lora_model.to(device)
 phq_questions = ['have interest or pleasure in doing things', 'feel down, depressed or hopeless', 'have trouble staying or falling asleep or sleeping for too long', 'feel tired or have little energy', 'have poor appetite or overeats',
                  'feel bad about themself, that they are a failure or have let themself or family down', 'trouble concentrating on things like school work, reading or watching television', 'move or speak more slowly than usual or be very fidgety and restless']
 label_desc = ['PHQ8_NoInterest', 'PHQ8_Depressed', 'PHQ8_Sleep', 'PHQ8_Tired', 'PHQ8_Appetite', 'PHQ8_Failure', 'PHQ8_Concentrating', 'PHQ8_Moving']
-participant_data = pd.read_csv('augmented_dataset_phq_similarity.csv', index_col=[0])
+participant_data = pd.read_csv('augmented_dataset_phq_based.csv', index_col=[0])
+train_df = pd.read_csv('train_split_Depression_AVEC2017.csv')
+dev_df = pd.read_csv('dev_split_Depression_AVEC2017.csv')
+test_df = pd.read_csv('full_test_split.csv')
+
+participant_data = pd.read_csv('augmented_dataset_phq_based.csv')
 train_df = pd.read_csv('train_split_Depression_AVEC2017.csv')
 dev_df = pd.read_csv('dev_split_Depression_AVEC2017.csv')
 test_df = pd.read_csv('full_test_split.csv')
@@ -45,11 +48,14 @@ test_df = pd.read_csv('full_test_split.csv')
 train_data = train_df.merge(participant_data, left_on='Participant_ID', right_on='personId')
 val_data = dev_df.merge(participant_data, left_on='Participant_ID', right_on='personId')
 test_data = test_df.merge(participant_data, left_on='Participant_ID', right_on='personId')
-train_data = train_data.dropna()
-val_data = val_data.dropna()
-test_data = test_data.dropna()
 
-print(len(train_data), len(val_data), len(test_data))
+test_data.drop(test_data.filter(regex="Unname"),axis=1, inplace=True)
+train_data.drop(train_data.filter(regex="Unname"),axis=1, inplace=True)
+val_data.drop(val_data.filter(regex="Unname"),axis=1, inplace=True)
+
+train_data.dropna(inplace=True)
+print(len(train_data),len(val_data),len(test_data))
+
 fine_tuning_data = []
 label_list = []
 
@@ -75,14 +81,14 @@ for index, row in val_data.iterrows():
     for i in range(1, 9):
         responses.append(row['phq_response' + str(i)])
     for i in range(len(phq_questions)):
-        prompt = "If a clinician was providing a diagnosis for the PHQ symptom: " + phq_questions[i] + " for the response: " + responses[i] + " based on the level (0,1,2,3) you would provide the label "  # Access label from corresponding PHQ column
+        prompt = "If a clinician was providing a diagnosis for the PHQ symptom: " + phq_questions[i] + " for the response: " + responses[i] + " based on the level (0,1,2,3) you would provide the label " # Access label from corresponding PHQ column
         inputs = tokenizer(prompt, return_tensors="pt").to(device)
         val_fine_tuning_data.append(inputs)
         val_label_list.append(row[label_desc[i]])  # Access label from corresponding PHQ column
 
 
 # Fine-tune the Lora model
-optimizer = torch.optim.AdamW(lora_model.parameters(), lr=2e-5)  # Adjust learning rate as needed
+optimizer = torch.optim.AdamW(lora_model.parameters(), lr=1e-5)  # Adjust learning rate as needed
 loss_fct = nn.CrossEntropyLoss()
 for epoch in range(3):
     for i in range(len(fine_tuning_data)):
@@ -107,10 +113,7 @@ for epoch in range(3):
 
     
 
-
 # Using the prompt and data to create output
-
-
 def predict_phq_score(participant_id, top_n_responses, predictions):
     """
     Predicts PHQ score for a participant using the LLM model.
@@ -129,6 +132,8 @@ def predict_phq_score(participant_id, top_n_responses, predictions):
             predicted_score = 0
         participant_predictions.append(predicted_score)
     predictions[participant_id] = {'PHQs': participant_predictions, 'Total Score': sum(participant_predictions)}
+
+
 
 
 # Running the Model:
