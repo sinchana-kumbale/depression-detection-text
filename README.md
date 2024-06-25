@@ -1,12 +1,12 @@
 This details the code efforts carried out from January 2024 to July 2024 for depression detection focused on text information and through the README will try to highlight the different folders and files inside and will illustrate what function they serve.
 
-- **DEPTWEET Replication**
-  
-  Replicates the work by Kabir et al, 2023 ([Paper](https://www.sciencedirect.com/science/article/pii/S0747563222003235))
-  * `data_preprocess.py: ` Loads a dataset and splits into train, val and test sets
-  * `LSTM.py: ` Builds an LSTM Model and calculates AUC Score replicating the work in their paper
-  * `BERT.py: ` Uses Transformer's BERT with DEPTWEET and calculated AUC similar to their efforts
-  * `DistilBERT.py: ` Uses Transformer's DistilBERT with DEPTWEET and calculated AUC similar to their efforts
+
+- **AnxietyDetectionMethodology_Replicated**
+
+  Replicates the work by Agarwal et al, 2023 ([Paper](https://arxiv.org/pdf/2312.15272)) but modifies it for depression detection
+  * `dataset_analysis.py: ` Used to visualise the sentiment and emotion distribution of the depressed and non depressed classes of the DAIC WOZ dataset with T5 finetuned models.
+  * `extract_features.py: ` Used to load the DAIC WOZ transcripts, apply basic preprocessing, use roberta to encode and extract features
+  * `train_evaluate_models.py: ` Uses the encoded tokens and features and splits into the default train, test and validation, upsamples to balance the classes, uses SVM classifier and reports metrics
 
 
 - **DAIC_WOZ_Replication**
@@ -17,12 +17,14 @@ This details the code efforts carried out from January 2024 to July 2024 for dep
   * `model_transcript.py: ` Used the created transcript file to detect depression with an LSTM model and GloVe embeddings. The code performs basic pre processing before input to the model. It does not use the pre provided train, test and validation split of DAIC WOZ.
 
 
-- **AnxietyDetectionMethodology_Replicated**
 
-  Replicates the work by Agarwal et al, 2023 ([Paper](https://arxiv.org/pdf/2312.15272)) but modifies it for depression detection
-  * `dataset_analysis.py: ` Used to visualise the sentiment and emotion distribution of the depressed and non depressed classes of the DAIC WOZ dataset with T5 finetuned models.
-  * `extract_features.py: ` Used to load the DAIC WOZ transcripts, apply basic preprocessing, use roberta to encode and extract features
-  * `train_evaluate_models.py: ` Uses the encoded tokens and features and splits into the default train, test and validation, upsamples to balance the classes, uses SVM classifier and reports metrics
+- **DEPTWEET Replication**
+  
+  Replicates the work by Kabir et al, 2023 ([Paper](https://www.sciencedirect.com/science/article/pii/S0747563222003235))
+  * `data_preprocess.py: ` Loads a dataset and splits into train, val and test sets
+  * `LSTM.py: ` Builds an LSTM Model and calculates AUC Score replicating the work in their paper
+  * `BERT.py: ` Uses Transformer's BERT with DEPTWEET and calculated AUC similar to their efforts
+  * `DistilBERT.py: ` Uses Transformer's DistilBERT with DEPTWEET and calculated AUC similar to their efforts
 
 
 - **Sinchana DAIC WOZ Codes**
@@ -31,7 +33,14 @@ This details the code efforts carried out from January 2024 to July 2024 for dep
   - **LLM**
 
     Contains all LLM related experimentations (When running on NSCC, ngpus:2 and walltime about 15 hours were selected)
-
+    * `create_fewshot_examples.py: ` Selecting examples from the train set, one of each type as few shot data to feed to the LLM prompts
+    * `neural_chat_llm_fewshot.py: ` Predicts PHQ scores for each participant, for every PHQ question using a prompt with the few shot examples and returns an output csv file that contains participant ids, their individual PHQ question scores and overall PHQ Score
+    * `neural_chat_llm_fewshot_labelpred.py: ` Predicts a PHQ label (None, Mild, Moderate, Severe) for each participant, for every PHQ question using a prompt with the few shot examples and returns an output csv file that contains participant ids, their individual PHQ question labels and overall PHQ Score
+    * `neural_chat_llm_lora.py: ` Uses the DAIC WOZ predefined train and development sets to finetune a LoRA that is further used to provide an output csv file containing predicted PHQ scores for individual paticipants and questions and the overall PHQ Score
+    * `neural_chat_llm_lora_binary.py: ` Uses the DAIC WOZ predefined train and development sets to finetune a LoRA that is further used to provide an output csv file containing participant ids and binary depression predictions
+    * `neural_chat_llm_zeroshot.py: ` Predicts PHQ scores for each participant, for every PHQ question using a prompt with no prior examples and returns an output csv file that contains participant ids, their individual PHQ question scores and overall PHQ Score
+    * `phq_similarit_response_selection.py: ` Uses the all-mpnet based model to create embeddings of the PHQ symptoms and participant responses to curate top n responses most similar to each symptom for each participant.
+  <br>
 
   * `chunck_wise_data.py: ` Used to split the overall DAIC WOZ transcripts into 3 sections - the warm up, core of the interview and the cool down based on the length of the transcripts and the time difference
   * `data_augmentation.py: ` Implementation of the topic modelling based data augmentation ([Ref](https://arxiv.org/pdf/1803.10384)) where n random combination of m topics shuffled from participants who have more than m topics are created
