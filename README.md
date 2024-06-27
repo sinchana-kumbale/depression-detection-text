@@ -1,3 +1,6 @@
+
+## Code Organisation and Description
+
 This details the code efforts carried out from January 2024 to July 2024 for depression detection focused on text information and through the README will try to highlight the different folders and files inside and will illustrate what function they serve.
 
 
@@ -51,3 +54,11 @@ This details the code efforts carried out from January 2024 to July 2024 for dep
   * `reinforcement_learning.py: ` Uses a Q Learning agent within the environment with a reward as a combination of increase in RoBERTa accuracy, lexical diversity, keyword matches and readability, trained with early stopping
   * `responses_by_question_phrases.py: ` Selects a set of participant responses based on specifically selected 8 emotionally relevant questions most asked by Ellie. Accounts for follow up questions asking the participant to elaborate by considering the phrases used to follow up.
   * `topic_based_responses.py: ` Creates an LDA topic model with the selected topic number (29) and a subset of selected topics based on the coherence threshold (0.655) observed through experimentation. The participant responses belonging to any of the selected topics are included
+
+
+## Other Project Related Links
+* Drive Containing some relevant documents: [Link](https://learnermanipal-my.sharepoint.com/:f:/g/personal/sinchana_kumbale_learner_manipal_edu/EjpDsmTNaNxDrpyT3HbBnXkBhlFf6aUw4VOzcjccE4abgQ?e=AvbgLD)
+* Folder with all presentations: [Link](https://learnermanipal-my.sharepoint.com/:f:/g/personal/sinchana_kumbale_learner_manipal_edu/EhwfX4V-Ne5JlElcyLHwxPEB1fyZyHJdrRJ_y--cNcStYA?e=gfaU4Z?)
+* Notion page with excerpts of papers read: [Link](https://thread-drawbridge-64a.notion.site/NTU-Research-Internship-cf4e439cea4f4541a247ef763e8494fc?pvs=4)
+* Document with flow of work (kind of disorganised): [Link](https://learnermanipal-my.sharepoint.com/:w:/g/personal/sinchana_kumbale_learner_manipal_edu/EXDdZkBi9NlJu-x73_0M2OwBU7EFIQcxHs_vrX3uJTQUhQ?e=8E3kgt)
+
