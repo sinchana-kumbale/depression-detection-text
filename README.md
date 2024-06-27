@@ -39,7 +39,7 @@ This details the code efforts carried out from January 2024 to July 2024 for dep
     * `neural_chat_llm_lora.py: ` Uses the DAIC WOZ predefined train and development sets to finetune a LoRA that is further used to provide an output csv file containing predicted PHQ scores for individual paticipants and questions and the overall PHQ Score
     * `neural_chat_llm_lora_binary.py: ` Uses the DAIC WOZ predefined train and development sets to finetune a LoRA that is further used to provide an output csv file containing participant ids and binary depression predictions
     * `neural_chat_llm_zeroshot.py: ` Predicts PHQ scores for each participant, for every PHQ question using a prompt with no prior examples and returns an output csv file that contains participant ids, their individual PHQ question scores and overall PHQ Score
-    * `phq_similarit_response_selection.py: ` Uses the all-mpnet based model to create embeddings of the PHQ symptoms and participant responses to curate top n responses most similar to each symptom for each participant.
+    * `phq_similarity_response_selection.py: ` Uses the all-mpnet based model to create embeddings of the PHQ symptoms and participant responses to curate top n responses most similar to each symptom for each participant.
   <br>
 
   * `chunck_wise_data.py: ` Used to split the overall DAIC WOZ transcripts into 3 sections - the warm up, core of the interview and the cool down based on the length of the transcripts and the time difference
